@@ -1,0 +1,53 @@
+name: Send Schedule SMS
+
+on:
+  schedule:
+    # Send at 6:00 AM EST on weekdays (Monday-Friday)
+    - cron: '0 11 * * 1-5'  # 11:00 UTC = 6:00 AM EST (UTC-5) / 7:00 AM EDT (UTC-4)
+    # Send at 7:00 PM EST on weeknight (Sunday-Thursday for next day)
+    - cron: '0 0 * * 1-5'   # 00:00 UTC = 7:00 PM EST previous day
+  
+  # Allow manual triggering for testing
+  workflow_dispatch:
+    inputs:
+      message_type:
+        description: 'Which message to send'
+        required: true
+        default: 'today'
+        type: choice
+        options:
+        - today
+        - tomorrow
+
+jobs:
+  send-sms:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.8'
+        
+    - name: Install dependencies
+      run: |
+        pip install ics python-dateutil pyyaml requests python-dotenv
+        
+    - name: Send morning message (6 AM)
+      if: github.event.schedule == '0 11 * * 1-5' || (github.event_name == 'workflow_dispatch' && github.event.inputs.message_type == 'today')
+      env:
+        TEXTBELT_API_KEY: ${{ secrets.TEXTBELT_API_KEY }}
+        TO_PHONE_NUMBER: ${{ secrets.TO_PHONE_NUMBER }}
+      run: |
+        python rotate_days.py --sms-today
+        
+    - name: Send evening message (7 PM)
+      if: github.event.schedule == '0 0 * * 1-5' || (github.event_name == 'workflow_dispatch' && github.event.inputs.message_type == 'tomorrow')
+      env:
+        TEXTBELT_API_KEY: ${{ secrets.TEXTBELT_API_KEY }}
+        TO_PHONE_NUMBER: ${{ secrets.TO_PHONE_NUMBER }}
+      run: |
+        python rotate_days.py --sms-tomorrow

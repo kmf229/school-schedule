@@ -1,0 +1,21 @@
+# Environment variables with sensitive data
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment
+venv/
+env/
+
+# Manual off-days file (optional - you might want to include this)
+# manual_off_days.yaml
+
+# IDE files
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
