@@ -50,10 +50,12 @@ def is_weekend(d):
 
 def load_manual_off_days():
     if not os.path.exists(MANUAL_FILE):
-        return set()
+        return set(), set()
     with open(MANUAL_FILE, "r") as f:
         data = yaml.safe_load(f) or {}
-    return {date.fromisoformat(s) for s in data.get("extra_no_school", [])}
+    extra_off = {date.fromisoformat(s) for s in data.get("extra_no_school", [])}
+    force_school = {date.fromisoformat(s) for s in data.get("force_school_days", [])}
+    return extra_off, force_school
 
 def save_manual_off_days(days):
     with open(MANUAL_FILE, "w") as f:
@@ -83,6 +85,14 @@ def fetch_ics_no_school_dates(url):
 def cycle_day_on(target, anchor_date, anchor_cycle, no_school):
     if target == anchor_date:
         return anchor_cycle
+    
+    # For weekends or no-school days, find the next instructional day
+    if is_weekend(target) or target in no_school:
+        next_instructional = target
+        while is_weekend(next_instructional) or next_instructional in no_school:
+            next_instructional += timedelta(days=1)
+        return cycle_day_on(next_instructional, anchor_date, anchor_cycle, no_school)
+    
     cycle = anchor_cycle
     step = 1 if target > anchor_date else -1
     d = anchor_date
@@ -218,8 +228,9 @@ def get_daily_summary_message(target):
     """Generate daily summary as a string for SMS or printing."""
     cal = fetch_calendar(ICS_URL)
     ics_block = fetch_ics_no_school_dates(ICS_URL)
-    manual = load_manual_off_days()
-    no_school = ics_block | manual
+    manual_off, force_school = load_manual_off_days()
+    # Apply force_school override to remove incorrect ICS detections
+    no_school = (ics_block | manual_off) - force_school
 
     cyc = cycle_day_on(target, ANCHOR_DATE, ANCHOR_CYCLE, no_school)
     message = f"{target:%A %b %d, %Y}: Cycle Day {cyc}\n"
@@ -292,19 +303,27 @@ def cmd_check(target_str):
     print_daily_summary(date.fromisoformat(target_str))
 
 def cmd_add_off(d):
-    days = load_manual_off_days()
+    days, _ = load_manual_off_days()
     days.add(d)
     save_manual_off_days(days)
     print(f"Added manual off-day: {d.isoformat()}")
 
 def cmd_list_off():
-    days = sorted(load_manual_off_days())
-    if not days:
-        print("No manual off-days saved.")
+    days, force_school = load_manual_off_days()
+    days = sorted(days)
+    force_school = sorted(force_school)
+    
+    if not days and not force_school:
+        print("No manual overrides saved.")
     else:
-        print("Manual off-days:")
-        for d in days:
-            print(" •", d.isoformat())
+        if days:
+            print("Manual off-days:")
+            for d in days:
+                print(" •", d.isoformat())
+        if force_school:
+            print("Forced school days (override ICS):")
+            for d in force_school:
+                print(" •", d.isoformat())
 
 
 # ====== MAIN ======

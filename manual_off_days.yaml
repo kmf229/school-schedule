@@ -1,0 +1,5 @@
+extra_no_school:
+- '2025-11-04'
+# Override incorrect ICS calendar detections  
+force_school_days:
+- '2025-11-03'
